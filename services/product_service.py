@@ -1,109 +1,118 @@
 from fastapi import HTTPException, status
+from sqlalchemy.orm import Session
 
-from fastapi_product.repositories.product_repository import product_repository
-from fastapi_product.schemas.product import (
+from models.product import Product
+from models.category import Category
+from schemas.product import CategoryResponse
+
+from repositories.product_repository import product_repository
+from schemas.product import (
     ProductCreate,
     ProductUpdate,
-    Product,
     ProductDetailResponse,
     ProductListResponse,
 )
 
-
 class ProductService:
-    def create_product(self, data: ProductCreate):
-        if not data.product_name:
-            raise HTTPException(
-                status.HTTP_422_UNPROCESSABLE_ENTITY, "name을 입력하세요."
-            )
-        if not data.category:
-            raise HTTPException(
-                status.HTTP_422_UNPROCESSABLE_ENTITY, "category를 입력하세요."
-            )
+    def create_product(self, db: Session, data: ProductCreate) -> ProductDetailResponse:
 
-        if data.discount_price >= data.price:
+        category = db.get(Category, data.category_id)
+        if not category:
             raise HTTPException(
-                status.HTTP_422_UNPROCESSABLE_ENTITY, "discount_price는 price보다 작아야 합니다."
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"카테고리 없다 category_id={data.category_id}",
             )
 
-        new_product = Product(
-            name=data.product_name, 
-            price=data.price,
-            discount_price=data.discount_price,
-            stock=data.stock,
-            category=data.category,
-        )
+        new_product = product_repository.save(db, data)
 
-        saved = product_repository.save(new_product)
-        return self._to_detail(saved)
+        db.commit()
+        db.refresh(new_product)
 
-    def read_products(self):
-        items = product_repository.find_all()
+        new_product.category = db.get(Category, new_product.category_id)
+
+        return self._to_detail(new_product)
+
+    def read_products(
+        self,
+        db: Session,
+        keyword: str | None,
+        category_id: int | None,
+        limit: int,
+    ) -> list[ProductListResponse]:
+        items = product_repository.find_all(db, keyword, category_id, limit)
         return [self._to_list(p) for p in items]
 
-    def read_product_by_id(self, id: int) -> Product:
-        product = product_repository.findById(id)
+    def read_product_by_id(self, db: Session, id: int):
+        product = product_repository.find_by_id(db, id)
         if not product:
-            raise HTTPException(status.HTTP_404_NOT_FOUND, "없는 id입니다.")
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "상품 없다람쥐")
         return product
-
-    def detail_product(self, id: int) -> ProductDetailResponse:
-        product = self.read_product_by_id(id)
-        return self._to_detail(product)
-
-    def update_product(self, id: int, data: ProductUpdate) -> ProductDetailResponse:
-        self.read_product_by_id(id)
-
-        if (
-            data.product_name is None
-            and data.price is None
-            and data.discount_price is None
-            and data.stock is None
-            and data.category is None
-        ):
+    
+    def read_products_by_category(self, db: Session, category_id: int) -> list[ProductListResponse]:
+        category = db.get(Category, category_id)
+        if not category:
             raise HTTPException(
-                status.HTTP_422_UNPROCESSABLE_ENTITY, "수정할 값이 없습니다."
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"카테고리 없다고. category_id={category_id}",
             )
 
-        updated = product_repository.modify(id, data)
-        if not updated:
-            raise HTTPException(status.HTTP_404_NOT_FOUND, "없는 id입니다.")
-        if updated.discount_price >= updated.price:
-            raise HTTPException(
-                status.HTTP_422_UNPROCESSABLE_ENTITY, "discount_price는 price보다 작아야 합니다."
-            )
+        items = product_repository.find_by_category_id(db, category_id)
+        return [self._to_list(p) for p in items]
+    
 
-        return self._to_detail(updated)
+    def update_product(self, db: Session, id: int, data: ProductUpdate):
+        # 수정할 상품 존재 여부를 먼저 확인한다.
+        updated_product = self.read_product_by_id(db, id)
+        
+        # 레포지토리를 통해 객체 정보를 수정(더티 체크 대상)한다.
+        updated_product = product_repository.update(db, updated_product, data)
+        
+        # 최종 확정 및 갱신
+        db.commit()
+        db.refresh(updated_product)
+        
+        return updated_product
 
-    def delete_product(self, id: int):
-        self.read_product_by_id(id)
+    def delete_product(self, db: Session, id: int):
+        product = self.read_product_by_id(db, id)
+        
+        product_repository.delete(db, product)
+        
+        # 삭제 트랜잭션을 확정한다.
+        db.commit()
 
-        return product_repository.delete(id)
-
-    # 계산 함수들
+    # ---------- mapping ----------
     def _final_price(self, p: Product) -> int:
-        return p.price - p.discount_price
+        return p.discount_price
 
     def _is_sold_out(self, p: Product) -> bool:
         return p.stock <= 0
 
     def _to_detail(self, p: Product) -> ProductDetailResponse:
+        if not p.category:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="카테고리 없다고",
+            )
         return ProductDetailResponse(
             id=p.id,
             name=p.name,
             final_price=self._final_price(p),
-            category=p.category,         
+            stock=p.stock,
             is_sold_out=self._is_sold_out(p),
-            stock=p.stock,           
+            category=CategoryResponse.model_validate(p.category),
         )
 
     def _to_list(self, p: Product) -> ProductListResponse:
+        if not p.category:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="카테고리 없다고",
+            )
         return ProductListResponse(
             id=p.id,
             name=p.name,
             final_price=self._final_price(p),
-            category=p.category,
+            category=CategoryResponse.model_validate(p.category)
         )
-
-
 product_service = ProductService()

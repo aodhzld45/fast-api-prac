@@ -1,58 +1,50 @@
-from typing import Optional, List
+from fastapi import APIRouter, Depends, status, Path, Query
+from sqlalchemy.orm import Session
+from typing import Annotated
 
-from fastapi import APIRouter, status, Path, Query
-
-from fastapi_product.schemas.product import (
+from database import get_db
+from schemas.product import (
     ProductCreate,
-    ProductUpdate,
-    ProductDetailResponse,
     ProductListResponse,
+    ProductDetailResponse
 )
-from fastapi_product.services.product_service import product_service
+from services.product_service import product_service
 
-router = APIRouter(prefix="/products-mvc", tags=["products-mvc"])
+router = APIRouter(prefix="/products", tags=["Product"])
 
-
-@router.post("", response_model=ProductDetailResponse, status_code=status.HTTP_201_CREATED)
-def create_product(data: ProductCreate):
-    return product_service.create_product(data)
-
-
-@router.get("", response_model=List[ProductListResponse])
-def read_product_list(
-    keyword: Optional[str] = Query(None, min_length=2),
-    p_category: Optional[str] = Query(None, alias="p-category"),
-    limit: int = Query(20, ge=1, le=100),
+@router.post(
+    "",
+    response_model=ProductDetailResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_product(
+    data: ProductCreate,
+    db: Session = Depends(get_db),
 ):
-    items = product_service.read_products()
+    return product_service.create_product(db, data)
 
-    # keyword (name 기준)
-    if keyword:
-        items = [x for x in items if keyword in x.name]
+# @router.get("", response_model=list[ProductListResponse])
+# def read_product_list(db: Session = Depends(get_db)):
+#     return product_service.read_products(db)
 
-    # category filter
-    if p_category:
-        items = [x for x in items if x.category == p_category]
-
-    # limit
-    items = items[:limit]
-
-    return items
-
-
-@router.get("/{product_id}", response_model=ProductDetailResponse)
-def detail_product(product_id: int = Path(..., ge=1)):
-    return product_service.detail_product(product_id)
-
-
-@router.put("/{product_id}", response_model=ProductDetailResponse)
-def update_product(
-    product_id: int = Path(..., ge=1),
-    data: ProductUpdate = ...,
+@router.get("", response_model=list[ProductListResponse])
+def read_products(
+    db: Session = Depends(get_db),
+    keyword: Annotated[str | None, Query(min_length=2)] = None,
+    category: Annotated[str | None, Query(alias="p-category")] = None,
+    limit: Annotated[int, Query()] = 20
 ):
-    return product_service.update_product(product_id, data)
+    return product_service.read_products(db, keyword, category, limit)
 
+@router.get("/{id}", response_model=ProductDetailResponse)
+def read_product(id: int, db: Session = Depends(get_db)):
+    return product_service.read_product_by_id(db, id)
 
-@router.delete("/{product_id}")
-def delete_product(product_id: int = Path(..., ge=1)):
-    return product_service.delete_product(product_id)
+@router.put("/{id}", response_model=ProductDetailResponse)
+def update_product(id: int, data: ProductCreate, db: Session = Depends(get_db)):
+    return product_service.update_product(db, id, data)
+
+@router.delete("/{id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_product(id: int, db: Session = Depends(get_db)):
+    product_service.delete_product(db, id)
+
