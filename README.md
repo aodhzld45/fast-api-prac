@@ -25,9 +25,12 @@
 
 ### 2) 카테고리 생성 (DB 직접 입력)
 
-```sql
-INSERT INTO categories (name) VALUES ('전자기기');
+```json
+http://localhost:8000/categories
 ```
+{
+    "name" : "카카오프렌즈"
+}
 
 ---
 
@@ -252,3 +255,4 @@ DELETE /users/1/wishlist/1
 4. `GET /users/1/wishlist`
 5. `DELETE /users/1/wishlist/1`
 6. `GET /users/1/wishlist`
+
