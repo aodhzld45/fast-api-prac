@@ -2,6 +2,8 @@
 from fastapi import FastAPI
 from routers.product_router import router as product_router
 from routers.category_router import router as category_router
+from routers.user_router import router as user_router
+from routers.wish_list_router import router as wish_list_router
 import models
 
 # DB 연결 설정 부분
@@ -16,6 +18,8 @@ app = FastAPI()
 
 app.include_router(category_router)
 app.include_router(product_router)
+app.include_router(user_router)
+app.include_router(wish_list_router)
 
 
 

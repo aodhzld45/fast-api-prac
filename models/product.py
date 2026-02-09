@@ -4,9 +4,12 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy import String, ForeignKey 
 from database import Base
 from typing import TYPE_CHECKING
+from sqlalchemy.ext.associationproxy import association_proxy, AssociationProxy
 
 if TYPE_CHECKING:
     from .category import Category
+    from .wishlist import WishList
+    from .user import User
 
 class Product(Base):
     __tablename__ = "products"
@@ -24,7 +27,14 @@ class Product(Base):
         "Category",
         back_populates="products",
     )
+        
+    wish_list: Mapped[list["WishList"]] = relationship(
+        back_populates="product", cascade="all, delete-orphan"
+    )
     
+    # product.wishlist로 바로 접근이 가능해집니다.
+    tags: AssociationProxy[list["User"]] = association_proxy("wish_list", "user")
+
     @property
     def final_price(self) -> int:
         return self.discount_price
