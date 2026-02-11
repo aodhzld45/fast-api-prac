@@ -41,9 +41,28 @@ class ProductService:
     ) -> list[ProductListResponse]:
         items = product_repository.find_all(db, keyword, category_id, limit)
         return [self._to_list(p) for p in items]
+    
+    
+    # 조회 쿼리 성능 향상
+    def read_categories_with(
+        self,
+        db: Session,
+        keyword: str | None,
+        category_id: int | None,
+        limit: int,
+    ) -> list[ProductListResponse]:
+        items = product_repository.find_all_with_category(db, keyword, category_id, limit)
+        return [self._to_list(p) for p in items]
 
     def read_product_by_id(self, db: Session, id: int):
         product = product_repository.find_by_id(db, id)
+        if not product:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "상품 없다람쥐")
+        return product
+    
+    # 조회 성능 향상 - joinedload로 쿼리 한번만 날리기.
+    def read_product_with_by_id(self, db: Session, id: int):
+        product = product_repository.find_by_with_category_id(db, id)
         if not product:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "상품 없다람쥐")
         return product
@@ -55,10 +74,8 @@ class ProductService:
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"카테고리 없다고. category_id={category_id}",
             )
-
         items = product_repository.find_by_category_id(db, category_id)
         return [self._to_list(p) for p in items]
-    
 
     def update_product(self, db: Session, id: int, data: ProductUpdate):
         # 수정할 상품 존재 여부를 먼저 확인한다.

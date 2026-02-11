@@ -2,7 +2,7 @@
 
 from sqlalchemy.orm import Session
 from sqlalchemy import select
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import selectinload, joinedload
 
 from models.product import Product
 from models.category import Category as CategoryModel
@@ -26,6 +26,7 @@ class ProductRepository:
         db.add(new_product)
         return new_product
     
+    # 상품 1:N 이 관계에서 selectinload을 붙이게 되면 쿼리가 두번 실행됨.
     def find_all(
             self,
             db: Session,
@@ -44,7 +45,29 @@ class ProductRepository:
             stmt = stmt.order_by(Product.id.desc()).limit(limit)
 
             return db.scalars(stmt).all()
+    
+    # 쿼리 성능 향상 - 관계가 many-to-one (Product.category)
+    # 목록에서 항상 category를 사용(응답에 포함/화면 표시)
+    # limit가 작고(20~100), 페이지네이션 기반 목록   
+    def find_all_with_category(
+            self,
+            db: Session,
+            keyword: str | None = None,
+            category_id: int | None = None,
+            limit: int = 20,
+        ):
+            stmt = select(Product).options(joinedload(Product.category))
 
+            if keyword:
+                stmt = stmt.where(Product.name.contains(keyword))
+
+            if category_id:
+                stmt = stmt.where(Product.category_id == category_id)
+
+            stmt = stmt.order_by(Product.id.desc()).limit(limit)
+
+            return db.scalars(stmt).all()
+    
     def find_by_id(self, db: Session, id: int):
         # 기본키(Primary Key)를 이용한 조회는 db.get이 가장 빠르고 효율적이다.
         return db.get(Product, id)
@@ -58,6 +81,16 @@ class ProductRepository:
         )
         return db.scalars(stmt).all()    
     
+    # 조회 성능 향상
+    def find_by_with_category_id(self, db: Session, category_id: int) -> list[Product]:
+        stmt = (
+            select(Product)
+            .options(joinedload(Product.category)) 
+            .where(Product.category_id == category_id)
+            .order_by(Product.id.desc())
+        )
+        return db.scalars(stmt).all()    
+
     # Product Create Value
     # model_config = ConfigDict(from_attributes=True, populate_by_name=True)
     # product_name: str = Field(..., min_length=2, max_length=50, alias="name")
