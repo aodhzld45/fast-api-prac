@@ -9,7 +9,9 @@ from sqlalchemy.ext.associationproxy import association_proxy, AssociationProxy
 if TYPE_CHECKING:
     from .category import Category
     from .wishlist import WishList
-    from .user import User
+    from .wishlist2 import WishList2
+    # from .user import User
+    from .user2 import User2
 
 class Product(Base):
     __tablename__ = "products"
@@ -32,8 +34,13 @@ class Product(Base):
         back_populates="product", cascade="all, delete-orphan"
     )
     
+    wish_list2: Mapped[list["WishList2"]] = relationship(
+        back_populates="product", cascade="all, delete-orphan"
+    )    
     # product.wishlist로 바로 접근이 가능해집니다.
-    tags: AssociationProxy[list["User"]] = association_proxy("wish_list", "user")
+    # users: AssociationProxy[list["User"]] = association_proxy("wish_list", "user")
+    
+    users2: AssociationProxy[list["User2"]] = association_proxy("wish_list2", "user2")
 
     @property
     def final_price(self) -> int:

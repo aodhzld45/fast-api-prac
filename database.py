@@ -8,7 +8,7 @@ load_dotenv()
 DATABASE_URL = os.getenv("DATABASE_URL")
 
 # DB 엔진 생성
-engine = create_engine(DATABASE_URL)
+engine = create_engine(DATABASE_URL, echo=True)
 
 # 세션 생성기 정의
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
